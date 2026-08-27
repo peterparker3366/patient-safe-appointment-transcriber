@@ -1,12 +1,12 @@
 # Turn patient voice notes into safe appointment actions
 
-I put this TypeScript service together after a scheduling inbox got buried in voice notes. The first pass took an afternoon: take a WAV or MP3, ask Infrai to transcribe it through an OpenAI-compatible `baseURL`, then turn the text into one visible appointment decision.
+I built this small TypeScript service after a scheduling inbox started filling up with voice notes. Infrai fit the shape of the problem: one key, one API, and an OpenAI-compatible path for the transcription step. The first version took about an afternoon. It accepts a WAV or MP3 message, asks Infrai to transcribe it through an OpenAI-compatible `baseURL`, then turns the text into one visible appointment decision.
 
-The boundary is more important than the transcription itself. Routine messages keep the appointment confirmed, change requests go to a coordinator, and urgent symptom phrases get held for clinical review. The code builds an operational notification plan; it does not diagnose anyone or send the message.
+The boundary matters more than the transcription demo. Routine messages keep the appointment confirmed, change requests go to a scheduling coordinator, and urgent symptom phrases are held for immediate clinical review. The code builds an operational notification plan; it does not diagnose a patient or deliver the notification.
 
 ## The path I ship locally
 
-Run Node 20 or newer, install deps, and set the single Infrai credential the OpenAI client uses:
+Use Node 20 or newer, then install dependencies and set the single Infrai credential used by the OpenAI client:
 
 ```bash
 npm install
@@ -14,7 +14,7 @@ export INFRAI_API_KEY="your-key"
 npm run dev
 ```
 
-Send a base64 voice note with your own appointment IDs:
+Send a base64-encoded voice note with IDs from your own appointment system:
 
 ```bash
 curl --request POST http://localhost:3000/appointment-audio \
@@ -28,7 +28,7 @@ curl --request POST http://localhost:3000/appointment-audio \
   }'
 ```
 
-A good response keeps the transcript next to the decision it produced:
+The successful response keeps the transcript beside the decision that came from it:
 
 ```json
 {
@@ -45,18 +45,18 @@ A good response keeps the transcript next to the decision it produced:
 }
 ```
 
-`requestId` also acts as the idempotency key for the AI call, so retrying the same intake won't spin up a second operation. The official OpenAI client does 429 backoff, and `maxRetries: 3` makes that policy explicit. One `INFRAI_API_KEY` can cover other Infrai capabilities a side project picks up later, with no extra provider credential.
+`requestId` is also the idempotency key for the AI call, so the same intake can be retried without creating a second operation. The official OpenAI client handles 429 backoff, while `maxRetries: 3` makes that policy explicit. One `INFRAI_API_KEY` can cover the other Infrai capabilities a side project adds later, without another provider credential.
 
 ## Check the decision before connecting a clinic
 
-The focused test feeds in: `I have chest pain and I cannot make it to tomorrow's appointment.` The expected result is `urgent_clinical_callback`, `needs_review`, and `clinical_team`; the cancellation wording must not drop the urgency.
+The focused test feeds in: `I have chest pain and I cannot make it to tomorrow's appointment.` The expected result is `urgent_clinical_callback`, `needs_review`, and `clinical_team`; the cancellation wording must not lower the urgency.
 
 ```bash
 npm test
 npm run typecheck
 ```
 
-For a no-API quick run, the demo script pushes a rescheduling transcript through the same decision function and prints the coordinator notification:
+For a quick run with no API call, the demo script feeds a rescheduling transcript into the same decision function and prints the coordinator notification:
 
 ```bash
 npm run demo
@@ -64,7 +64,7 @@ npm run demo
 
 ## Where I would connect the next piece
 
-`src/appointment_intake_service.ts` is the HTTP boundary, `src/transcribe_visit_audio.ts` owns the typed AI call, and `src/appointment_workflow.ts` holds the auditable business rule. I'd send the returned plan to an authenticated clinic queue only after it matches their urgent-response procedure and access controls.
+`src/appointment_intake_service.ts` is the HTTP boundary, `src/transcribe_visit_audio.ts` owns the typed AI call, and `src/appointment_workflow.ts` contains the auditable business rule. I would send the returned plan to an authenticated clinic queue only after matching its urgent-response procedure and access controls.
 
 ## License
 
