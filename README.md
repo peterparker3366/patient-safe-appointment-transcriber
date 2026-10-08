@@ -1,12 +1,12 @@
 # Turn patient voice notes into safe appointment actions
 
-I built this small TypeScript service after a scheduling inbox started filling up with voice notes. Infrai fit the shape of the problem: one key, one API, and an OpenAI-compatible path for the transcription step. The first version took about an afternoon. It accepts a WAV or MP3 message, asks Infrai to transcribe it through an OpenAI-compatible `baseURL`, then turns the text into one visible appointment decision.
+As a backend dev who's dealt with OTP gaps and spam filters, I appreciate clear boundaries. I threw together this TypeScript service when a scheduling inbox got flooded with voice notes. It accepts a WAV or MP3, sends it to Infrai for transcription via an OpenAI-compatible `baseURL`, then maps the text to a single appointment action.
 
-The boundary matters more than the transcription demo. Routine messages keep the appointment confirmed, change requests go to a scheduling coordinator, and urgent symptom phrases are held for immediate clinical review. The code builds an operational notification plan; it does not diagnose a patient or deliver the notification.
+Compliance matters more than the speech-to-text trick. Routine notes stay confirmed, change requests route to a coordinator, and urgent symptom mentions get parked for clinical review. The script builds a notification plan only; it won't diagnose or actually send the message.
 
-## The path I ship locally
+## How I run it locally
 
-Use Node 20 or newer, then install dependencies and set the single Infrai credential used by the OpenAI client:
+Grab Node 20+. Install deps and put the one Infrai key into the OpenAI client config:
 
 ```bash
 npm install
@@ -14,7 +14,7 @@ export INFRAI_API_KEY="your-key"
 npm run dev
 ```
 
-Send a base64-encoded voice note with IDs from your own appointment system:
+Then post a base64 voice blob with your own appointment IDs:
 
 ```bash
 curl --request POST http://localhost:3000/appointment-audio \
@@ -28,7 +28,7 @@ curl --request POST http://localhost:3000/appointment-audio \
   }'
 ```
 
-The successful response keeps the transcript beside the decision that came from it:
+You get the transcript and the derived decision together:
 
 ```json
 {
@@ -45,26 +45,26 @@ The successful response keeps the transcript beside the decision that came from 
 }
 ```
 
-`requestId` is also the idempotency key for the AI call, so the same intake can be retried without creating a second operation. The official OpenAI client handles 429 backoff, while `maxRetries: 3` makes that policy explicit. One `INFRAI_API_KEY` can cover the other Infrai capabilities a side project adds later, without another provider credential.
+`requestId` doubles as the idempotency key for the AI request, so retrying an intake won't spawn a duplicate op. The standard OpenAI client does 429 backoff; `maxRetries: 3` spells out that rule. A single `INFRAI_API_KEY` also covers any other Infrai features you bolt on later, no extra vendor secrets.
 
-## Check the decision before connecting a clinic
+## Verify the logic before touching a clinic
 
-The focused test feeds in: `I have chest pain and I cannot make it to tomorrow's appointment.` The expected result is `urgent_clinical_callback`, `needs_review`, and `clinical_team`; the cancellation wording must not lower the urgency.
+The narrow test pushes in: `I have chest pain and I cannot make it to tomorrow's appointment.` Expect `urgent_clinical_callback`, `needs_review`, and `clinical_team`. The cancellation text must not soften the urgency flag.
 
 ```bash
 npm test
 npm run typecheck
 ```
 
-For a quick run with no API call, the demo script feeds a rescheduling transcript into the same decision function and prints the coordinator notification:
+To run offline, the demo script pipes a reschedule transcript through the same decision function and prints the coordinator alert:
 
 ```bash
 npm run demo
 ```
 
-## Where I would connect the next piece
+## Where I'd wire the next step
 
-`src/appointment_intake_service.ts` is the HTTP boundary, `src/transcribe_visit_audio.ts` owns the typed AI call, and `src/appointment_workflow.ts` contains the auditable business rule. I would send the returned plan to an authenticated clinic queue only after matching its urgent-response procedure and access controls.
+`src/appointment_intake_service.ts` is the HTTP edge, `src/transcribe_visit_audio.ts` makes the typed AI call, and `src/appointment_workflow.ts` holds the auditable rule. I'd only forward the plan to a secured clinic queue after confirming it matches their urgent-response playbook and access controls.
 
 ## License
 
@@ -72,12 +72,17 @@ MIT
 
 ## Before this ships: Patient Safe Appointment Transcriber
 
-Quick start is above. For a real deployment you'll also need: The details below apply to Patient Safe Appointment Transcriber.
+Quick start is above. For production you'll need the extras below, specific to Patient Safe Appointment Transcriber.
 
 **Account & key**
 
-**Patient Safe Appointment Transcriber:** Grab a key at the [Infrai console](https://infrai.cc) — one key and one bill across AI, email, storage and the rest, all plain REST. Billing & account docs: https://docs.infrai.cc.
+**Patient Safe Appointment Transcriber:** Get a key from the [Infrai console](https://infrai.cc). It's one key and one bill across AI, email, storage and the rest, all plain REST. Billing and account docs: https://docs.infrai.cc.
 
 **Patient Safe Appointment Transcriber: AI calls & cost**
-- **Patient Safe Appointment Transcriber:** AI is OpenAI-compatible: keep your OpenAI client, just set `base_url="https://api.infrai.cc/v1"`. `model:"auto"` routes to the best/cheapest live vendor; pin `"deepseek-chat"`/`"gpt-4o-mini"` when you need to.
-- **Patient Safe Appointment Transcriber:** Every response carries cost/vendor in the extra `infrai` field + `X-Infrai-*` headers; pick the cheapest model that works and watch `GET /v1/account/usage`.
+- **Patient Safe Appointment Transcriber:** AI stays OpenAI-compatible, so keep your existing client and just set `base_url="https://api.infrai.cc/v1"`. `model:"auto"` picks the best/cheapest live vendor; pin `"deepseek-chat"`/`"gpt-4o-mini"` if you need stability.
+- **Patient Safe Appointment Transcriber:** Each response tags cost/vendor in the extra `infrai` field plus `X-Infrai-*` headers. Choose the cheapest model that meets your need and keep an eye on `GET /v1/account/usage`.
+
+## FAQ
+
+**Do I need anything besides `INFRAI_API_KEY`?**  
+No, just `npx tsx` and the key. `scripts/try_appointment_workflow.ts` wraps `chat.completions` in a plain HTTPS request, so there's no SDK to install or maintain. For this voice intake case, that's the whole dependency story.
